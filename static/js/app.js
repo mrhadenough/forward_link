@@ -6,10 +6,39 @@ import Message from './message'
 class App extends React.Component {
   constructor(props) {
     super(props)
+
+    this.sock = null
     this.state = {
       clientType: '',
+      messages: '',
+      wsReady: false,
+      value: 1,
     }
+
+    this.onCreateEmiter = this.onCreateEmiter.bind(this)
   }
+
+  componentDidMount() {
+    console.log("did mount");
+
+    this.sock = new WebSocket('ws://127.0.0.1:3000/ws');
+
+    this.sock.onopen = () => {
+        console.log("connected");
+    }
+
+    this.sock.onclose = (e) => {
+        console.log("connection closed (" + e.code + ")");
+    }
+
+    this.sock.onmessage = (e) => {
+      this.setState({value: e.data})
+      console.log("message received: " + e.data);
+    }
+
+    this.setState({wsReady: true})
+  }
+
 
   renderEmiter() {
     return (
@@ -31,11 +60,22 @@ class App extends React.Component {
     )
   }
 
+  onCreateEmiter() {
+    this.setState({clientType: 'emiter'})
+    this.sock.send('create_emiter');
+  }
+
+  // onSend() {
+  //   console.log("send message")
+  //   let msg = document.getElementById('message').value;
+  //   this.sock.send(msg);
+  // };
+
   render() {
     if (this.state.clientType === '') {
       return (
         <div>
-          <button onClick={() => {this.setState({clientType: 'emiter'})}}>Create new channel</button>
+          <button onClick={this.onCreateEmiter}>Create new channel</button>
           <button onClick={() => {this.setState({clientType: 'receiver'})}}>Join channel</button>
         </div>
       )
