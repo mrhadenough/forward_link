@@ -9,81 +9,142 @@ class App extends React.Component {
 
     this.sock = null
     this.state = {
-      clientType: '',
+      role: '',
       messages: '',
       wsReady: false,
-      value: 1,
+      token: '',
+      error: null,
     }
 
-    this.onCreateEmiter = this.onCreateEmiter.bind(this)
+    this.receiver = (e) => {console.log(e.data)}
+
+    this.connectToServer = this.connectToServer.bind(this)
+    this.onCreateMaster = this.onCreateMaster.bind(this)
+    this.onCreateSlave = this.onCreateSlave.bind(this)
+    this.onCheckToken = this.onCheckToken.bind(this)
+    this.onMasterSend = this.onMasterSend.bind(this)
+
+    // master
+    this.waitForToken = this.waitForToken.bind(this)
+    // slave
+    this.waitWhenTokenValid = this.waitWhenTokenValid.bind(this)
+    this.waitForText = this.waitForText.bind(this)
   }
 
   componentDidMount() {
     console.log("did mount");
+    this.connectToServer()
+  }
 
-    this.sock = new WebSocket('ws://127.0.0.1:3000/ws');
+  connectToServer() {
+    while (true) {
+      try {
+        this.sock = new WebSocket('ws://127.0.0.1:3000/ws');
+        break
+      } catch (e) {
+        console.error(e)
+      }
+    }
 
     this.sock.onopen = () => {
-        console.log("connected");
+      this.setState({ error: null })
+      console.log("connected");
     }
 
     this.sock.onclose = (e) => {
-        console.log("connection closed (" + e.code + ")");
+      const error = "connection closed (" + e.code + ")"
+      console.log(error);
+      this.setState({ error })
+      setTimeout(this.connectToServer, 1000)
     }
 
     this.sock.onmessage = (e) => {
-      this.setState({value: e.data})
       console.log("message received: " + e.data);
+      this.receiver(e)
+      // this.setState({value: e.data})
     }
 
     this.setState({wsReady: true})
   }
 
+  onCheckToken() {
+    this.sock.send(document.getElementById('token').value)
+  }
 
-  renderEmiter() {
+  waitForToken(e) {
+    this.setState({token: e.data})
+  }
+
+  waitWhenTokenValid(e) {
+    this.setState({token: e.data})
+  }
+
+  waitForText(e) {
+    this.setState({message: e.data})
+  }
+
+  onCreateMaster() {
+    this.setState({role: 'emiter'})
+    this.sock.send('master')
+  }
+
+  onCreateSlave() {
+    console.log('Create slave')
+    this.setState({role: 'slave'})
+    this.receiver = this.waitForText
+  }
+
+  onMasterSend(e) {
+    console.log("send message")
+    this.sock.send(document.getElementById('message').value)
+  };
+
+  renderMaster() {
     return (
       <div>
         <h5>Enter some text to search in google or direct link</h5>
-        <p>Passcode: <b>a8BFj</b></p>
-        <input type="text" placeholder=""/>
-        <button>Enter</button>
+        <p>Passcode: <b>{this.state.token}</b></p>
+        <input type="text" id="message" placeholder="enter some text" onClick={this.onMasterSend} />
       </div>
     )
   }
 
-  renderReceiver() {
+  renderSlave() {
     return (
       <div>
-        <input type="text" placeholder="enter the code"/>
-        <button>Enter</button>
+        <input type="text" id="token" placeholder="enter the code"/>
+        <button onClick={this.onCheckToken}>Enter</button>
       </div>
     )
   }
 
-  onCreateEmiter() {
-    this.setState({clientType: 'emiter'})
-    this.sock.send('create_emiter');
+  renderError() {
+    return <div style={{ color: 'red' }}>{this.state.error}</div>
   }
 
-  // onSend() {
-  //   console.log("send message")
-  //   let msg = document.getElementById('message').value;
-  //   this.sock.send(msg);
-  // };
-
-  render() {
-    if (this.state.clientType === '') {
+  renderApp() {
+    if (this.state.role === '') {
       return (
         <div>
-          <button onClick={this.onCreateEmiter}>Create new channel</button>
-          <button onClick={() => {this.setState({clientType: 'receiver'})}}>Join channel</button>
+          <button onClick={this.onCreateMaster}>Create new channel</button>
+          <button onClick={this.onCreateSlave}>Join channel</button>
         </div>
       )
     }
-    if (this.state.clientType == 'emiter') {
-      return this.renderEmiter()
+    if (this.state.role == 'emiter') {
+      return this.renderMaster()
     }
-    return this.renderReceiver()
+    return this.renderSlave()
+  }
+
+  render() {
+    return (
+      <div>
+        <div>{this.renderError()}</div>
+        <div>{this.renderApp()}</div>
+      </div>
+    )
+
   }
 }
 

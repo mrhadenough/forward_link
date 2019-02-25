@@ -1,100 +1,152 @@
 package main
 
 import (
-	"fmt"
+	"flag"
 	"log"
+	"math/rand"
 	"net/http"
 	"time"
 
-	"golang.org/x/net/websocket"
+	"github.com/gorilla/websocket"
 )
 
-func increment(val int, ws *websocket.Conn) {
-	for {
-		val++
-		reply := fmt.Sprintf("%d", val)
-		if err := websocket.Message.Send(ws, reply); err != nil {
-			fmt.Println("Can't send")
-			break
-		}
-		time.Sleep(1 * time.Second)
-	}
+const (
+	ROLE  = 1
+	TOKEN = 2
+	TEXT  = 3
+	LINK  = 4
+)
+
+type Message struct {
+	Type    int
+	Message string `json:"message"`
 }
 
-func Receiver(ws *websocket.Conn) {
-	for {
-		var msg string
-		if err := websocket.Message.Receive(ws, &msg); err != nil {
-			fmt.Println("Can't receive")
-			break
-		}
-		fmt.Printf("Received: %s\n", reply)
+var channels = make(map[string](chan string))
+var upgrader = websocket.Upgrader{}
+
+func NewToekn(n int) string {
+	rand.Seed(time.Now().UnixNano())
+	var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
 	}
+	return string(b)
 }
 
-func Emiter(ws *websocket.Conn) {
-
+func Slave(c *websocket.Conn) {
+	log.Println("Create slave")
+	var ch chan string
+	for {
+		var msg Message
+		log.Println("Wait for proper token from slave client")
+		if err := c.ReadJSON(&msg); err != nil {
+			log.Println(err)
+			return
+		}
+		if msg.Type != TOKEN {
+			log.Printf("Slave expected token %d\n", msg.Type)
+			continue
+		}
+		token := msg.Message
+		channel, ok := channels[token]
+		if !ok {
+			log.Println("wrong token")
+			log.Println(c.WriteMessage(websocket.TextMessage, []byte("wrong token")))
+			continue
+		}
+		// got valid token
+		ch = channel
+		break
+		log.Println("Slave is listening now")
+	}
+	for {
+		if err := c.WriteJSON(Message{Message: <-ch, Type: TEXT}); err != nil {
+			log.Println(err)
+			break
+		}
+	}
+	log.Println("Close slave")
 }
 
-func DialUp(ws *websocket.Conn) {
-	// we should implement full duplex connection
-
-	// var err error
-
+func Master(c *websocket.Conn) {
+	log.Println("Create master")
+	token := NewToekn(4)
+	ch := make(chan string)
+	channels[token] = ch
+	defer func() {
+		close(ch)
+		delete(channels, token)
+	}()
+	log.Println("Create new token", token)
 	for {
-		// detect role
-		// if receiver then need to take a password and validate it
-		// if emiter then need to create the password and send to front
-		// subsribe for receiving and emiting ws
-		// create a map with hash (pass code) and forward messages
-		fmt.Println("echo")
-		var msg string
-
-		if err := websocket.Message.Receive(ws, &msg); err != nil {
-			fmt.Println("Can't receive")
+		var msg Message
+		log.Println("Wait for master client to write")
+		if err := c.ReadJSON(&msg); err != nil {
+			log.Println(err)
 			break
-			// return
 		}
-		fmt.Printf("Received: %s\n", msg)
-
-		if msg == "emiter" {
-			Receiver(ws)
+		if msg.Type != TEXT || msg.Type != LINK {
+			log.Println("Unexpected message type %d for Master", msg.Type)
+			break
 		}
-
-		if msg == "receiver" {
-			Emiter(ws)
-		}
-
-		go Receiver(ws)
-		go Sender(ws)
-
-		// if val, err := strconv.Atoi(reply); err == nil {
-		// fmt.Println("NO ERRORS")
-		// val++
-		// reply = fmt.Sprintf("%d", val)
-		// go increment(val, ws)
-		// break
-		// }a
-
-		// fmt.Println("Received back from client: " + reply)
-
-		// msg := "Received:  " + reply
-		// fmt.Println("Sending to client: " + msg)
-
-		// fmt.Println("reply", reply)
-		// if err = websocket.Message.Send(ws, reply); err != nil {
-		// 	fmt.Println("Can't send")
-		// 	break
-		// }
+		ch <- string(msg.Message)
 	}
+	log.Println("Close master")
+}
+
+func GetRole(c *websocket.Conn) (string, error) {
+	var msg Message
+	if err := c.ReadJSON(&msg); err != nil {
+		log.Println(err)
+		return "", err
+	}
+	return string(msg.Type), nil
+}
+
+func WsLogic(w http.ResponseWriter, r *http.Request) {
+	upgrader.CheckOrigin = func(r *http.Request) bool {
+		log.Println("New connection, origin:", r.Header.Get("Origin"))
+		return true
+	}
+	c, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println("upgrade:", err)
+		return
+	}
+	defer c.Close()
+	// go func() {
+	// for {
+	var msg Message
+	if err := c.ReadJSON(&msg); err != nil {
+		log.Println(err)
+		log.Println("EXIT MAIN LOOP")
+		return
+	}
+	if msg.Type == ROLE {
+		if msg.Message == "master" {
+			go Master(c)
+		} else {
+			go Slave(c)
+		}
+	}
+	// return string(), err
+	// }
+	// }()
+	// role, err := GetRole(c)
+	// if role == "master" {
+	// 	go Master(c)
+	// } else if role == "master" {
+	// 	go Slave(c)
+	// }
 }
 
 func main() {
-	http.Handle("/ws", websocket.Handler(DialUp))
+	log.Println("Start server")
+	flag.Parse()
+	http.HandleFunc("/ws", WsLogic)
 	http.Handle("/", http.FileServer(http.Dir("./templates")))
 	http.Handle("/static", http.FileServer(http.Dir("./static")))
-
-	if err := http.ListenAndServe("127.0.0.1:3000", nil); err != nil {
-		log.Fatal("ListenAndServe:", err)
-	}
+	log.Fatal(http.ListenAndServe("127.0.0.1:3000", nil))
 }
