@@ -11,10 +11,12 @@ import (
 )
 
 const (
-	ROLE  = 1
-	TOKEN = 2
-	TEXT  = 3
-	LINK  = 4
+	PICK_ROLE   = iota
+	AUTHORIZE   = iota
+	MASTER_TEXT = iota
+	MASTER_LINK = iota
+	SLAVE_TEXT  = iota
+	SLAVE_LINK  = iota
 )
 
 type Message struct {
@@ -45,7 +47,7 @@ func Slave(c *websocket.Conn) {
 			log.Println(err)
 			return
 		}
-		if msg.Type != TOKEN {
+		if msg.Type != AUTHORIZE {
 			log.Printf("Slave expected token %d\n", msg.Type)
 			continue
 		}
@@ -62,7 +64,7 @@ func Slave(c *websocket.Conn) {
 		log.Println("Slave is listening now")
 	}
 	for {
-		if err := c.WriteJSON(Message{Message: <-ch, Type: TEXT}); err != nil {
+		if err := c.WriteJSON(Message{Message: <-ch, Type: MASTER_TEXT}); err != nil {
 			log.Println(err)
 			break
 		}
@@ -87,7 +89,7 @@ func Master(c *websocket.Conn) {
 			log.Println(err)
 			break
 		}
-		if msg.Type != TEXT || msg.Type != LINK {
+		if msg.Type != AUTHORIZE || msg.Type != MASTER_LINK {
 			log.Println("Unexpected message type %d for Master", msg.Type)
 			break
 		}
@@ -105,7 +107,7 @@ func GetRole(c *websocket.Conn) (string, error) {
 	return string(msg.Type), nil
 }
 
-func WsLogic(w http.ResponseWriter, r *http.Request) {
+func WsHandler(w http.ResponseWriter, r *http.Request) {
 	upgrader.CheckOrigin = func(r *http.Request) bool {
 		log.Println("New connection, origin:", r.Header.Get("Origin"))
 		return true
@@ -115,24 +117,46 @@ func WsLogic(w http.ResponseWriter, r *http.Request) {
 		log.Println("upgrade:", err)
 		return
 	}
+	// ? may be it's better to get role before loop
 	defer c.Close()
-	// go func() {
-	// for {
-	var msg Message
-	if err := c.ReadJSON(&msg); err != nil {
-		log.Println(err)
-		log.Println("EXIT MAIN LOOP")
-		return
-	}
-	if msg.Type == ROLE {
-		if msg.Message == "master" {
-			go Master(c)
-		} else {
-			go Slave(c)
+	var role string
+	var token string
+	for {
+		var msg Message
+		if err := c.ReadJSON(&msg); err != nil {
+			log.Println(err)
+			log.Println("EXIT MAIN LOOP")
+			return
 		}
+		switch msg.Type {
+		case PICK_ROLE:
+			log.Printf("ROLE %s", msg.Message)
+			if msg.Message == "master" {
+				go Master(c)
+			}
+			role = msg.Message
+			log.Println("role:", role)
+		case AUTHORIZE:
+			// ? need to handle the case when connection lost
+			// ? slave client send token and get authorized
+			// ? for master client need to think how to handle the reconnection
+			log.Println("AUTHORIZE")
+			token = msg.Message
+			log.Println("token:", token)
+		case MASTER_TEXT:
+			log.Println("MASTER_TEXT")
+		case MASTER_LINK:
+			log.Println("MASTER_LINK")
+		}
+		// if msg.Type == ROLE {
+		// 	if msg.Message == "master" {
+		// 		go Master(c)
+		// 	} else {
+		// 		go Slave(c)
+		// 	}
+		// }
+		// return string(), err
 	}
-	// return string(), err
-	// }
 	// }()
 	// role, err := GetRole(c)
 	// if role == "master" {
@@ -143,9 +167,15 @@ func WsLogic(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	// log.Printf("PICK_ROLE %d", PICK_ROLE)
+	// log.Printf("AUTHORIZE %d", AUTHORIZE)
+	// log.Printf("MASTER_TEXT %d", MASTER_TEXT)
+	// log.Printf("MASTER_LINK %d", MASTER_LINK)
+	// log.Printf("SLAVE_TEXT %d", SLAVE_TEXT)
+	// log.Printf("SLAVE_LINK %d", SLAVE_LINK)
 	log.Println("Start server")
 	flag.Parse()
-	http.HandleFunc("/ws", WsLogic)
+	http.HandleFunc("/ws", WsHandler)
 	http.Handle("/", http.FileServer(http.Dir("./templates")))
 	http.Handle("/static", http.FileServer(http.Dir("./static")))
 	log.Fatal(http.ListenAndServe("127.0.0.1:3000", nil))
