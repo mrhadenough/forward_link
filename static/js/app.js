@@ -8,8 +8,24 @@ const
   MSG_AUTHORIZE = 1,
   MSG_AUTH_FAILED = 2,
   MSG_PROVIDE_TOKEN = 3,
-  MSG_SEND_TEXT = 4,
-  MSG_SEND_LINK = 5
+  MSG_SEND_TEXT = 4;
+
+
+const styles = {
+  message: {
+    border: '1px solid gray',
+    borderRadius: '5px',
+    padding: '5px',
+    marginTop: '5px',
+    flex: 1,
+    backgroundColor: '#eee',
+  },
+  messageLink: {
+    textDecoration: 'none',
+    color: 'black',
+    fontFamily: 'Arial',
+  }
+}
 
 class App extends React.Component {
   constructor(props) {
@@ -82,8 +98,8 @@ class App extends React.Component {
   waitForText(e) {
     console.log(e.data)
     const data = JSON.parse(e.data)
-    if (data.type == MSG_SEND_TEXT || data.type == MSG_SEND_LINK) {
-      this.setState({ messages: [...this.state.messages, data.message] })
+    if (data.type == MSG_SEND_TEXT) {
+      this.setState({ messages: [...this.state.messages, data] })
     } else {
       console.error('Wrong message type', e)
     }
@@ -142,8 +158,23 @@ class App extends React.Component {
   onMasterSend(e) {
     console.log("send message")
     const message = document.getElementById('message').value
+    document.getElementById('message').value = ''
     this.send({ type: MSG_SEND_TEXT, message })
   };
+
+  renderMessage(msg, key) {
+    let link = msg.message
+    if (!msg.message.startsWith('http://') && !msg.message.startsWith('https://')) {
+      link = encodeURI(`http://google.com/search?q=${msg.message}`)
+    }
+    return (
+      <a key={key} href={link} target="_blank" style={styles.messageLink}>
+        <div style={styles.message}>
+          {msg.message}
+        </div>
+      </a>
+    )
+  }
 
   renderMaster() {
     return (
@@ -167,7 +198,8 @@ class App extends React.Component {
     }
     return (
       <div>
-        <div><pre>{JSON.stringify(this.state.messages, null, 2)}</pre></div>
+        <div>Items:</div>
+        <div>{this.state.messages.map(this.renderMessage)}</div>
       </div>
     )
   }

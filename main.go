@@ -16,13 +16,11 @@ const (
 	MSG_AUTH_FAILED   = iota
 	MSG_PROVIDE_TOKEN = iota
 	MSG_SEND_TEXT     = iota
-	MSG_SEND_LINK     = iota
 )
 
 type Message struct {
 	Type    int    `json:"type"`
 	Message string `json:"message"`
-	Token   uint64 `json:"token"`
 }
 
 var channels = make(map[string](chan string))
@@ -42,7 +40,7 @@ func NewToken(n int) string {
 	rand.Seed(time.Now().UnixNano())
 	// TODO: aboid 0 and collision
 	// return uint64(rand.Int())
-	var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	var letterRunes = []rune("1234567890")
 	b := make([]rune, n)
 	for i := range b {
 		b[i] = letterRunes[rand.Intn(len(letterRunes))]
