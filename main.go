@@ -1,8 +1,6 @@
 package main
 
 import (
-	"encoding/base64"
-	"encoding/binary"
 	"flag"
 	"log"
 	"math/rand"
@@ -13,23 +11,21 @@ import (
 )
 
 const (
-	PICK_ROLE     = iota
-	AUTHORIZE     = iota
-	AUTH_FAILED   = iota
-	PROVIDE_TOKEN = iota
-	MASTER_TEXT   = iota
-	MASTER_LINK   = iota
-	SLAVE_TEXT    = iota
-	SLAVE_LINK    = iota
+	MSG_PICK_ROLE     = iota
+	MSG_AUTHORIZE     = iota
+	MSG_AUTH_FAILED   = iota
+	MSG_PROVIDE_TOKEN = iota
+	MSG_SEND_TEXT     = iota
+	MSG_SEND_LINK     = iota
 )
 
 type Message struct {
-	Type    int
+	Type    int    `json:"type"`
 	Message string `json:"message"`
 	Token   uint64 `json:"token"`
 }
 
-var channels = make(map[uint64](chan string))
+var channels = make(map[string](chan string))
 var upgrader = websocket.Upgrader{}
 
 // func NewToekn(n int) string {
@@ -42,69 +38,39 @@ var upgrader = websocket.Upgrader{}
 // 	return string(b)
 // }
 
-func NewToekn(n int) uint64 {
+func NewToken(n int) string {
 	rand.Seed(time.Now().UnixNano())
-	return uint64(rand.Int())
-	// var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-	// b := make([]rune, n)
-	// for i := range b {
-	// 	b[i] = letterRunes[rand.Intn(len(letterRunes))]
-	// }
-	// return string(b)
+	// TODO: aboid 0 and collision
+	// return uint64(rand.Int())
+	var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+	return string(b)
 }
 
-func Slave(c *websocket.Conn) {
-	log.Println("Create slave")
-	var ch chan string
-	for {
-		var msg Message
-		log.Println("Wait for proper token from slave client")
-		if err := c.ReadJSON(&msg); err != nil {
-			log.Println(err)
-			return
-		}
-		if msg.Type != AUTHORIZE {
-			log.Printf("Slave expected token %d\n", msg.Type)
-			continue
-		}
-		channel, ok := channels[Base64ToUint64(msg.Message)]
-		if !ok {
-			log.Println("wrong token")
-			log.Println(c.WriteMessage(websocket.TextMessage, []byte("wrong token")))
-			continue
-		}
-		// got valid token
-		ch = channel
-		break
-		log.Println("Slave is listening now")
-	}
-	for {
-		if err := c.WriteJSON(Message{Message: <-ch, Type: MASTER_TEXT}); err != nil {
-			log.Println(err)
-			break
-		}
-	}
-	log.Println("Close slave")
-}
+// func Uint64ToBase64(token uint64) string {
+// 	bs := make([]byte, 8)
+// 	binary.LittleEndian.PutUint64(bs, token)
+// 	return base64.StdEncoding.EncodeToString(bs)
+// }
 
-func Uint64ToBase64(token uint64) string {
-	bs := make([]byte, 8)
-	binary.LittleEndian.PutUint64(bs, token)
-	return base64.StdEncoding.EncodeToString(bs)
-}
-
-func Base64ToUint64(token string) uint64 {
-	bs := base64.StdEncoding.DecodeString()
-	if len(bs) != 8 {
-		log.Println("Error converting base64 token to uint64, actual size = %d but should be 8", len(bs))
-		return 0
-	}
-	return binary.LittleEndian.Uint64(bs)
-}
+// func Base64ToUint64(token string) uint64 {
+// 	bs, err := base64.StdEncoding.DecodeString(token)
+// 	if err != nil {
+// 		return 0
+// 	}
+// 	if len(bs) != 8 {
+// 		log.Printf("Error converting base64 token to uint64, actual size = %d but should be 8\n", len(bs))
+// 		return 0
+// 	}
+// 	return binary.LittleEndian.Uint64(bs)
+// }
 
 func Master(c *websocket.Conn) {
 	log.Println("Create master")
-	token := NewToekn(4)
+	token := NewToken(4)
 	ch := make(chan string)
 	channels[token] = ch
 	defer func() {
@@ -113,12 +79,16 @@ func Master(c *websocket.Conn) {
 	}()
 	log.Println("Create new token", token)
 
-	c.WriteJSON(Message{Message: Uint64ToBase64(token), Type: PROVIDE_TOKEN})
+	// msg := strconv.Itoa(int(token))
+	if err := c.WriteJSON(Message{Message: token, Type: MSG_AUTHORIZE}); err != nil {
+		log.Println("Master", err)
+		return
+	}
 	for {
 		var msg Message
 		log.Println("Wait for master client to write")
 		if err := c.ReadJSON(&msg); err != nil {
-			log.Println(err)
+			log.Println("Master", err)
 			break
 		}
 		// if msg.Type != AUTHORIZE || msg.Type != MASTER_LINK {
@@ -130,10 +100,24 @@ func Master(c *websocket.Conn) {
 	log.Println("Close master")
 }
 
+func Slave(c *websocket.Conn, ch chan string) {
+	log.Println("Created slave")
+	for msg := range ch {
+		log.Println("Slave wait for master channel")
+		if err := c.WriteJSON(Message{Message: msg, Type: MSG_SEND_TEXT}); err != nil {
+			log.Println("Slave", err)
+			break
+		}
+		time.Sleep(100)
+		log.Println("Slave sent message to UI")
+	}
+	log.Println("Close slave")
+}
+
 func GetRole(c *websocket.Conn) (string, error) {
 	var msg Message
 	if err := c.ReadJSON(&msg); err != nil {
-		log.Println(err)
+		log.Println("Get role", err)
 		return "", err
 	}
 	return string(msg.Type), nil
@@ -149,10 +133,8 @@ func WsHandler(w http.ResponseWriter, r *http.Request) {
 		log.Println("upgrade:", err)
 		return
 	}
-	// ? may be it's better to get role before loop
 	defer c.Close()
 	var role string
-	var token string
 	for {
 		var msg Message
 		if err := c.ReadJSON(&msg); err != nil {
@@ -161,58 +143,33 @@ func WsHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		switch msg.Type {
-		case PICK_ROLE:
+		case MSG_PICK_ROLE:
 			log.Printf("ROLE %s", msg.Message)
 			if msg.Message == "master" {
-				go Master(c)
+				Master(c)
 			}
 			role = msg.Message
 			log.Println("role:", role)
-		case AUTHORIZE:
-			channel, ok := channels[Base64ToUint64(msg.Message)]
-			if !ok {
-				log.Println("AUTH_FAILED", err)
-				if err := c.WriteJSON(Message{Type: AUTH_FAILED}); err != nil {
-					log.Println(err)
+		case MSG_AUTHORIZE:
+			log.Println("MSG_AUTHORIZE")
+			if ch, ok := channels[msg.Message]; ok {
+				log.Println("Send to slave MSG_AUTHORIZE success")
+				if err := c.WriteJSON(Message{Type: MSG_AUTHORIZE}); err != nil {
+					log.Println("Slave", err)
 				}
+				Slave(c, ch)
 				continue
 			}
-			// ? need to handle the case when connection lost
-			// ? slave client send token and get authorized
-			// ? for master client need to think how to handle the reconnection
-			log.Println("AUTHORIZE")
-			token = msg.Message
-			log.Println("token:", token)
-		case MASTER_TEXT:
-			log.Println("MASTER_TEXT")
-		case MASTER_LINK:
-			log.Println("MASTER_LINK")
+			log.Println("AUTH_FAILED", err)
+			log.Printf("%#v, %#v", channels, msg.Message)
+			if err := c.WriteJSON(Message{Type: MSG_AUTH_FAILED}); err != nil {
+				log.Println(err)
+			}
 		}
-		// if msg.Type == ROLE {
-		// 	if msg.Message == "master" {
-		// 		go Master(c)
-		// 	} else {
-		// 		go Slave(c)
-		// 	}
-		// }
-		// return string(), err
 	}
-	// }()
-	// role, err := GetRole(c)
-	// if role == "master" {
-	// 	go Master(c)
-	// } else if role == "master" {
-	// 	go Slave(c)
-	// }
 }
 
 func main() {
-	// log.Printf("PICK_ROLE %d", PICK_ROLE)
-	// log.Printf("AUTHORIZE %d", AUTHORIZE)
-	// log.Printf("MASTER_TEXT %d", MASTER_TEXT)
-	// log.Printf("MASTER_LINK %d", MASTER_LINK)
-	// log.Printf("SLAVE_TEXT %d", SLAVE_TEXT)
-	// log.Printf("SLAVE_LINK %d", SLAVE_LINK)
 	log.Println("Start server")
 	flag.Parse()
 	http.HandleFunc("/ws", WsHandler)

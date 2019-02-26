@@ -3,6 +3,14 @@ import ReactDOM from 'react-dom'
 
 import Message from './message'
 
+const
+  MSG_PICK_ROLE = 0,
+  MSG_AUTHORIZE = 1,
+  MSG_AUTH_FAILED = 2,
+  MSG_PROVIDE_TOKEN = 3,
+  MSG_SEND_TEXT = 4,
+  MSG_SEND_LINK = 5
+
 class App extends React.Component {
   constructor(props) {
     super(props)
@@ -10,8 +18,9 @@ class App extends React.Component {
     this.sock = null
     this.state = {
       role: '',
-      messages: '',
-      wsReady: false,
+      messages: [],
+      wsConnected: false,
+      loaded: false,
       token: '',
       error: null,
     }
@@ -21,8 +30,9 @@ class App extends React.Component {
     this.connectToServer = this.connectToServer.bind(this)
     this.onCreateMaster = this.onCreateMaster.bind(this)
     this.onCreateSlave = this.onCreateSlave.bind(this)
-    this.onCheckToken = this.onCheckToken.bind(this)
+    this.checkToken = this.checkToken.bind(this)
     this.onMasterSend = this.onMasterSend.bind(this)
+    this.send = this.send.bind(this)
 
     // master
     this.waitForToken = this.waitForToken.bind(this)
@@ -40,6 +50,7 @@ class App extends React.Component {
     while (true) {
       try {
         this.sock = new WebSocket('ws://127.0.0.1:3000/ws');
+        this.setState({ wsConnected: true })
         break
       } catch (e) {
         console.error(e)
@@ -54,7 +65,7 @@ class App extends React.Component {
     this.sock.onclose = (e) => {
       const error = "connection closed (" + e.code + ")"
       console.log(error);
-      this.setState({ error })
+      this.setState({ error, wsConnected: false })
       setTimeout(this.connectToServer, 1000)
     }
 
@@ -64,39 +75,74 @@ class App extends React.Component {
       // this.setState({value: e.data})
     }
 
-    this.setState({wsReady: true})
+    this.setState({loaded: true})
   }
 
-  onCheckToken() {
-    this.sock.send(document.getElementById('token').value)
-  }
-
-  waitForToken(e) {
-    this.setState({token: e.data})
-  }
-
-  waitWhenTokenValid(e) {
-    this.setState({token: e.data})
-  }
-
+  // master
   waitForText(e) {
-    this.setState({message: e.data})
+    console.log(e.data)
+    const data = JSON.parse(e.data)
+    if (data.type == MSG_SEND_TEXT || data.type == MSG_SEND_LINK) {
+      this.setState({ messages: [...this.state.messages, data.message] })
+    } else {
+      console.error('Wrong message type', e)
+    }
+  }
+
+  // slave
+  checkToken() {
+    const message = document.getElementById('token').value
+    this.send({ type: MSG_AUTHORIZE, message })
+  }
+
+  // master
+  waitForToken(e) {
+    const data = JSON.parse(e.data)
+    if (data.type == MSG_AUTHORIZE) {
+      this.setState({token: data.message})
+    } else {
+      console.error('Wrong message type', e)
+    }
+  }
+
+  // slave
+  waitWhenTokenValid(e) {
+    const data = JSON.parse(e.data)
+    switch (data.type) {
+    case MSG_AUTHORIZE:
+      this.setState({ token: e.data })
+      this.receiver = this.waitForText
+      break
+    case MSG_AUTH_FAILED:
+      console.error('Wrong token')
+      this.setState({error: 'Wrong token'})
+    default:
+      console.error('Wrong message type')
+      this.setState({error: 'Wrong message type'})
+    }
+  }
+
+  send(msg) {
+    console.log("send message", msg)
+    this.sock.send(JSON.stringify(msg))
   }
 
   onCreateMaster() {
-    this.setState({role: 'emiter'})
-    this.sock.send('master')
+    this.receiver = this.waitForToken
+    this.setState({role: 'master'})
+    this.send({message: 'master', type: MSG_PICK_ROLE})
   }
 
   onCreateSlave() {
     console.log('Create slave')
     this.setState({role: 'slave'})
-    this.receiver = this.waitForText
+    this.receiver = this.waitWhenTokenValid
   }
 
   onMasterSend(e) {
     console.log("send message")
-    this.sock.send(document.getElementById('message').value)
+    const message = document.getElementById('message').value
+    this.send({ type: MSG_SEND_TEXT, message })
   };
 
   renderMaster() {
@@ -104,16 +150,24 @@ class App extends React.Component {
       <div>
         <h5>Enter some text to search in google or direct link</h5>
         <p>Passcode: <b>{this.state.token}</b></p>
-        <input type="text" id="message" placeholder="enter some text" onClick={this.onMasterSend} />
+        <input type="text" id="message" placeholder="enter some text" />
+        <button onClick={this.onMasterSend}>Send</button>
       </div>
     )
   }
 
   renderSlave() {
+    if (this.state.token === '') {
+      return (
+        <div>
+          <input type="text" id="token" placeholder="enter the code"/>
+          <button onClick={this.checkToken}>Enter</button>
+        </div>
+      )
+    }
     return (
       <div>
-        <input type="text" id="token" placeholder="enter the code"/>
-        <button onClick={this.onCheckToken}>Enter</button>
+        <div><pre>{JSON.stringify(this.state.messages, null, 2)}</pre></div>
       </div>
     )
   }
@@ -131,7 +185,7 @@ class App extends React.Component {
         </div>
       )
     }
-    if (this.state.role == 'emiter') {
+    if (this.state.role == 'master') {
       return this.renderMaster()
     }
     return this.renderSlave()
@@ -139,7 +193,10 @@ class App extends React.Component {
 
   render() {
     return (
-      <div>
+      <div style={{
+        padding: '10px',
+        borderTop: (this.state.wsConnected)? '4px solid #0c0' : '4px solid #ff2d00',
+      }}>
         <div>{this.renderError()}</div>
         <div>{this.renderApp()}</div>
       </div>
