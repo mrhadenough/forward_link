@@ -1,31 +1,12 @@
 import React from 'React'
 import ReactDOM from 'react-dom'
 
-import Message from './message'
-
 const
   MSG_PICK_ROLE = 0,
   MSG_AUTHORIZE = 1,
   MSG_AUTH_FAILED = 2,
   MSG_PROVIDE_TOKEN = 3,
   MSG_SEND_TEXT = 4;
-
-
-const styles = {
-  message: {
-    border: '1px solid gray',
-    borderRadius: '5px',
-    padding: '5px',
-    marginTop: '5px',
-    flex: 1,
-    backgroundColor: '#eee',
-  },
-  messageLink: {
-    textDecoration: 'none',
-    color: 'black',
-    fontFamily: 'Arial',
-  }
-}
 
 class App extends React.Component {
   constructor(props) {
@@ -168,8 +149,8 @@ class App extends React.Component {
       link = encodeURI(`http://google.com/search?q=${msg.message}`)
     }
     return (
-      <a key={key} href={link} target="_blank" style={styles.messageLink}>
-        <div style={styles.message}>
+      <a key={key} href={link} target="_blank" className="message-link">
+        <div className="message">
           {msg.message}
         </div>
       </a>
@@ -178,11 +159,15 @@ class App extends React.Component {
 
   renderMaster() {
     return (
-      <div>
-        <h5>Enter some text to search in google or direct link</h5>
-        <p>Passcode: <b>{this.state.token}</b></p>
-        <input type="text" id="message" placeholder="enter some text" />
-        <button onClick={this.onMasterSend}>Send</button>
+      <div className="center-wrapper">
+        <div className="passcode-wrapper">
+          <span className="lock-icon">🔒→</span>
+          <span className="passcode">{this.state.token}</span>
+        </div>
+        <div className="master-control-wrapper">
+          <input type="text" id="message" placeholder="enter some text" />
+          <button onClick={this.onMasterSend}>Send</button>
+        </div>
       </div>
     )
   }
@@ -198,7 +183,7 @@ class App extends React.Component {
     }
     return (
       <div>
-        <div>Items:</div>
+        <h3>Links</h3>
         <div>{this.state.messages.map(this.renderMessage)}</div>
       </div>
     )
@@ -211,8 +196,8 @@ class App extends React.Component {
   renderApp() {
     if (this.state.role === '') {
       return (
-        <div>
-          <button onClick={this.onCreateMaster}>Create new channel</button>
+        <div className="main-buttons-wrapper">
+          <button onClick={this.onCreateMaster}>New channel</button>
           <button onClick={this.onCreateSlave}>Join channel</button>
         </div>
       )

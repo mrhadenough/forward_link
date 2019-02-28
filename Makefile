@@ -4,7 +4,9 @@ run:
 	./bin/app
 
 dbg:
-	reflex -r 'main.go$' -s -- sh -c 'go build -o bin/app && ./bin/app'
+	# go get github.com/cespare/reflex
+	reflex -d none -R 'vendor/*' -R '.cache/*' -R 'node_modules/*' -r '\.go$\' -s -- sh -c 'make run'
 
 watch:
 	parcel templates/index.html
+
