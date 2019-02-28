@@ -5,6 +5,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -126,7 +127,7 @@ func WsHandler(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			log.Println("AUTH_FAILED", err)
-			log.Printf("%#v, %#v", channels, msg.Message)
+			log.Printf("%v <-- looked for %v", channels, msg.Message)
 			if err := c.WriteJSON(Message{Type: MSG_AUTH_FAILED}); err != nil {
 				log.Println(err)
 			}
@@ -140,5 +141,9 @@ func main() {
 	http.HandleFunc("/ws", WsHandler)
 	http.Handle("/", http.FileServer(http.Dir("./templates")))
 	http.Handle("/static", http.FileServer(http.Dir("./static")))
-	log.Fatal(http.ListenAndServe("0.0.0.0:3000", nil))
+	if domain, ok := os.LookupEnv("DOMAIN"); ok {
+		log.Fatal(http.ListenAndServe(domain, nil))
+	} else {
+		panic("env DOMAIN should be set. Example: [127.0.0.1:3000]")
+	}
 }

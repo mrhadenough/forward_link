@@ -1,7 +1,7 @@
 run:
 	dep ensure
 	go build -o bin/app
-	./bin/app
+	DOMAIN="127.0.0.1:3000" ./bin/app
 
 dbg:
 	# go get github.com/cespare/reflex
@@ -10,3 +10,6 @@ dbg:
 watch:
 	parcel templates/index.html
 
+push:
+	docker build -t mrhadenough/forward_link .
+	docker push mrhadenough/forward_link

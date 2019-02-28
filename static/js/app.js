@@ -21,6 +21,8 @@ class App extends React.Component {
       token: '',
       error: null,
     }
+    this.token = React.createRef();
+    this.message = React.createRef();
 
     this.receiver = (e) => {console.log(e.data)}
 
@@ -46,7 +48,11 @@ class App extends React.Component {
   connectToServer() {
     while (true) {
       try {
-        this.sock = new WebSocket('ws://127.0.0.1:3000/ws');
+        if (process.env.NODE_ENV === 'development') {
+          this.sock = new WebSocket("ws://127.0.0.1:3000/ws");
+        } else {
+          this.sock = new WebSocket(`ws://${location.host}/ws`);
+        }
         this.setState({ wsConnected: true })
         break
       } catch (e) {
@@ -69,7 +75,6 @@ class App extends React.Component {
     this.sock.onmessage = (e) => {
       console.log("message received: " + e.data);
       this.receiver(e)
-      // this.setState({value: e.data})
     }
 
     this.setState({loaded: true})
@@ -88,15 +93,14 @@ class App extends React.Component {
 
   // slave
   checkToken() {
-    const message = document.getElementById('token').value
-    this.send({ type: MSG_AUTHORIZE, message })
+    this.send({ type: MSG_AUTHORIZE, message: this.token.current.value })
   }
 
   // master
   waitForToken(e) {
     const data = JSON.parse(e.data)
     if (data.type == MSG_AUTHORIZE) {
-      this.setState({token: data.message})
+      this.setState({ token: data.message })
     } else {
       console.error('Wrong message type', e)
     }
@@ -107,14 +111,15 @@ class App extends React.Component {
     const data = JSON.parse(e.data)
     switch (data.type) {
     case MSG_AUTHORIZE:
-      this.setState({ token: e.data })
+      this.setState({ token: e.data, error: null })
       this.receiver = this.waitForText
       break
     case MSG_AUTH_FAILED:
       console.error('Wrong token')
       this.setState({error: 'Wrong token'})
+      break
     default:
-      console.error('Wrong message type')
+      console.error('Wrong message type', e.data)
       this.setState({error: 'Wrong message type'})
     }
   }
@@ -138,9 +143,8 @@ class App extends React.Component {
 
   onMasterSend(e) {
     console.log("send message")
-    const message = document.getElementById('message').value
-    document.getElementById('message').value = ''
-    this.send({ type: MSG_SEND_TEXT, message })
+    this.send({ type: MSG_SEND_TEXT, message: this.message.current.value })
+    this.message.value = ''
   };
 
   renderMessage(msg, key) {
@@ -165,7 +169,7 @@ class App extends React.Component {
           <span className="passcode">{this.state.token}</span>
         </div>
         <div className="master-control-wrapper">
-          <input type="text" id="message" placeholder="enter some text" />
+          <input type="text" ref={this.message} placeholder="enter text" />
           <button onClick={this.onMasterSend}>Send</button>
         </div>
       </div>
@@ -175,8 +179,8 @@ class App extends React.Component {
   renderSlave() {
     if (this.state.token === '') {
       return (
-        <div>
-          <input type="text" id="token" placeholder="enter the code"/>
+        <div className="master-control-wrapper">
+          <input type="text" ref={this.token} placeholder="enter the code"/>
           <button onClick={this.checkToken}>Enter</button>
         </div>
       )
@@ -214,6 +218,9 @@ class App extends React.Component {
         padding: '10px',
         borderTop: (this.state.wsConnected)? '4px solid #0c0' : '4px solid #ff2d00',
       }}>
+        <div className="refresh-page" onClick={() => {document.location.href = document.location.href}}>
+          <span className="refresh-page-icon">&#x21bb;</span>
+        </div>
         <div>{this.renderError()}</div>
         <div>{this.renderApp()}</div>
       </div>
