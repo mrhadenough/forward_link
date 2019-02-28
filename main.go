@@ -141,9 +141,9 @@ func main() {
 	http.HandleFunc("/ws", WsHandler)
 	http.Handle("/", http.FileServer(http.Dir("./templates")))
 	http.Handle("/static", http.FileServer(http.Dir("./static")))
-	if domain, ok := os.LookupEnv("DOMAIN"); ok {
-		log.Fatal(http.ListenAndServe(domain, nil))
+	if _, ok := os.LookupEnv("DEUBG"); ok {
+		log.Fatal(http.ListenAndServe("127.0.0.1:3000", nil))
 	} else {
-		panic("env DOMAIN should be set. Example: [127.0.0.1:3000]")
+		log.Fatal(http.ListenAndServe("0.0.0.0:3000", nil))
 	}
 }

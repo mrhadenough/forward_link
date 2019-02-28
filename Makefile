@@ -1,7 +1,7 @@
 run:
 	dep ensure
 	go build -o bin/app
-	DOMAIN="127.0.0.1:3000" ./bin/app
+	DEUBG=1 ./bin/app
 
 dbg:
 	# go get github.com/cespare/reflex
