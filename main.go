@@ -26,16 +26,6 @@ type Message struct {
 var channels = make(map[string](chan string))
 var upgrader = websocket.Upgrader{}
 
-// func NewToekn(n int) string {
-// 	rand.Seed(time.Now().UnixNano())
-// 	var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-// 	b := make([]rune, n)
-// 	for i := range b {
-// 		b[i] = letterRunes[rand.Intn(len(letterRunes))]
-// 	}
-// 	return string(b)
-// }
-
 func NewToken(n int) string {
 	rand.Seed(time.Now().UnixNano())
 	// TODO: aboid 0 and collision
@@ -48,24 +38,6 @@ func NewToken(n int) string {
 	return string(b)
 }
 
-// func Uint64ToBase64(token uint64) string {
-// 	bs := make([]byte, 8)
-// 	binary.LittleEndian.PutUint64(bs, token)
-// 	return base64.StdEncoding.EncodeToString(bs)
-// }
-
-// func Base64ToUint64(token string) uint64 {
-// 	bs, err := base64.StdEncoding.DecodeString(token)
-// 	if err != nil {
-// 		return 0
-// 	}
-// 	if len(bs) != 8 {
-// 		log.Printf("Error converting base64 token to uint64, actual size = %d but should be 8\n", len(bs))
-// 		return 0
-// 	}
-// 	return binary.LittleEndian.Uint64(bs)
-// }
-
 func Master(c *websocket.Conn) {
 	log.Println("Create master")
 	token := NewToken(4)
@@ -77,7 +49,6 @@ func Master(c *websocket.Conn) {
 	}()
 	log.Println("Create new token", token)
 
-	// msg := strconv.Itoa(int(token))
 	if err := c.WriteJSON(Message{Message: token, Type: MSG_AUTHORIZE}); err != nil {
 		log.Println("Master", err)
 		return
@@ -89,10 +60,6 @@ func Master(c *websocket.Conn) {
 			log.Println("Master", err)
 			break
 		}
-		// if msg.Type != AUTHORIZE || msg.Type != MASTER_LINK {
-		// 	log.Println("Unexpected message type %d for Master", msg.Type)
-		// 	break
-		// }
 		ch <- string(msg.Message)
 	}
 	log.Println("Close master")
@@ -173,5 +140,5 @@ func main() {
 	http.HandleFunc("/ws", WsHandler)
 	http.Handle("/", http.FileServer(http.Dir("./templates")))
 	http.Handle("/static", http.FileServer(http.Dir("./static")))
-	log.Fatal(http.ListenAndServe("127.0.0.1:3000", nil))
+	log.Fatal(http.ListenAndServe("0.0.0.0:3000", nil))
 }
