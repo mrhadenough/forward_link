@@ -1,30 +1,14 @@
-# Remote keyboard
+# Realtime link forward
 
 
-Install
-
-```
-# clone repo to $GOPATH/src/.../.../
-brew install dep
-dep ensure
-```
+### Run
 
 ```
-npm install -g parcel-bundler
-npm install
-parcel index.html
+docker run -d --name forward_link -p 3000:3000 mrhadenough/forward_link:latest
 ```
 
+### How to use
 
-Example of mermaid
-```mermaid
-sequenceDiagram
-    RPC->>Flag task: flag metric to update
-    Schedule update task-->>Flag task: check if something need to be updated
-    Flag task-->>Schedule update task: get items to update
-    Schedule update task->>Schedule update task: update metric
-    Schedule update task-->>Flag task: check if the metric hasn't been flaged to update again
-    Flag task-->>Schedule update task: get metric flag state
-    Note right of Schedule update task: Finish the task<br> if flaged to update
-    Schedule update task->>Flag task: update metric
-```
+1. Open the page in two browsers and create a channel.
+2. Open the same page in another browser, hit "join channel" and enter the secret number from the created channel.
+3. Now everything you write in first browser goes to the second.
