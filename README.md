@@ -1,11 +1,13 @@
 # Realtime link forward
 
+Simple link forwarder, useful for some smart tv browsers with not user-friendly keyboard to provide a better browsing experience.
 
 ### Run
 
 ```
 docker run -d --name forward_link -p 3000:3000 mrhadenough/forward_link:latest
 ```
+Nginx conf example [nginx.conf](./config/nginx.conf)
 
 ### How to use
 
